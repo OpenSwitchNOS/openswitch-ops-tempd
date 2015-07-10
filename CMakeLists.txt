@@ -23,24 +23,23 @@ project (${TEMPD})
 # Rules to locate needed libraries
 include(FindPkgConfig)
 pkg_check_modules(CONFIG_YAML config-yaml)
-pkg_check_modules(HALONUTILS halonutils)
-pkg_check_modules(SYSTEMD systemd)
 pkg_check_modules(OVSCOMMON libovscommon)
 pkg_check_modules(OVSDB libovsdb)
+
+include_directories (${PROJECT_BINARY_DIR} ${PROJECT_SOURCE_DIR}
+                     ${OVSCOMMON_INCLUDE_DIRS}
+)
 
 # Sources to build tempd
 set (SOURCES tempd.c)
 
-include_directories (${PROJECT_BINARY_DIR} ${PROJECT_SOURCE_DIR}
-   ${OVSCOMMON_INCLUDE_DIRS}
-)
-
 # Rules to build tempd
 add_executable (${TEMPD} ${SOURCES})
 
-target_link_libraries (${TEMPD} ${OVSCOMMON_LIBRARIES} ${OVSDB_LIBRARIES} ${SYSTEMD_LIBRARIES}
-   ${CONFIG_YAML_LIBRARIES} ${SYSTEMD_LIBRARIES} ${HALONUTILS_LIBRARIES} -lpthread -lrt -lm)
+target_link_libraries (${TEMPD} ${CONFIG_YAML_LIBRARIES}
+                       ${OVSCOMMON_LIBRARIES} ${OVSDB_LIBRARIES}
+                       -lpthread -lrt)
 
+# Rules to install tempd binary in rootfs
 install(TARGETS ${TEMPD}
-	RUNTIME DESTINATION bin)
-
+        RUNTIME DESTINATION bin)

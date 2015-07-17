@@ -20,6 +20,8 @@ cmake_minimum_required (VERSION 2.8)
 set (TEMPD tempd)
 project (${TEMPD})
 
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=gnu99 -Wall -Werror")
+
 # Rules to locate needed libraries
 include(FindPkgConfig)
 pkg_check_modules(CONFIG_YAML config-yaml)

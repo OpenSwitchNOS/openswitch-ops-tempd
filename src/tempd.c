@@ -347,15 +347,16 @@ add_subsystem(const struct ovsrec_subsystem *ovsrec_subsys)
     result->name = strdup(ovsrec_subsys->name);
     result->marked = false;
     result->marked = true;
-    result->parent_subsystem = NULL;  // HALON_TODO: find parent subsystem
+    result->parent_subsystem = NULL;  // OPS_TODO: find parent subsystem
     shash_init(&result->subsystem_sensors);
 
     // use a default if the hw_desc_dir has not been populated
     dir = ovsrec_subsys->hw_desc_dir;
 
     if (dir == NULL || strlen(dir) == 0) {
-        VLOG_WARN("Using default h/w description file directory: %s", DEFAULT_YAML_DIR);
-        dir = DEFAULT_YAML_DIR;
+        VLOG_ERR("No h/w description directory for subsystem %s",
+                                        ovsrec_subsys->name);
+        return(NULL);
     }
 
     // since this is a new subsystem, load all of the hardware description
@@ -391,10 +392,10 @@ add_subsystem(const struct ovsrec_subsystem *ovsrec_subsys)
     info = yaml_get_thermal_info(yaml_handle, ovsrec_subsys->name);
     result->emergency_shutdown = info->auto_shutdown;
 
-    // HALON_TODO: the thermal info has a polling period, but when we
-    // HALON_TODO: have multiple subsystems, that could be tricky to
-    // HALON_TODO: implement if there are different polling periods.
-    // HALON_TODO: For now, hardware the polling period to 5 seconds.
+    // OPS_TODO: the thermal info has a polling period, but when we
+    // OPS_TODO: have multiple subsystems, that could be tricky to
+    // OPS_TODO: implement if there are different polling periods.
+    // OPS_TODO: For now, hardware the polling period to 5 seconds.
 
     // prepare to add sensors to db
     sensor_idx = 0;
@@ -518,7 +519,7 @@ tempd_init(const char *remote)
     // create connection to db
     idl = ovsdb_idl_create(remote, &ovsrec_idl_class, false, true);
     idl_seqno = ovsdb_idl_get_seqno(idl);
-    ovsdb_idl_set_lock(idl, "halon_tempd");
+    ovsdb_idl_set_lock(idl, "ops_tempd");
     ovsdb_idl_verify_write_only(idl);
 
     // Register for daemon table.
@@ -738,7 +739,7 @@ tempd_remove_unmarked_subsystems(void)
             // delete the subsystem dictionary entry
             shash_delete(&subsystem_data, node);
 
-            // HALON_TODO: need to remove subsystem yaml data
+            // OPS_TODO: need to remove subsystem yaml data
         }
     }
 }
@@ -782,7 +783,7 @@ tempd_run(void)
     if (ovsdb_idl_is_lock_contended(idl)) {
         static struct vlog_rate_limit rl = VLOG_RATE_LIMIT_INIT(1, 1);
 
-        VLOG_ERR_RL(&rl, "another halon-tempd process is running, "
+        VLOG_ERR_RL(&rl, "another ops-tempd process is running, "
                     "disabling this process until it goes away");
 
         return;
@@ -797,7 +798,7 @@ tempd_run(void)
 
     daemonize_complete();
     vlog_enable_async();
-    VLOG_INFO_ONCE("%s (Halon tempd) %s", program_name, VERSION);
+    VLOG_INFO_ONCE("%s (OpenSwitch tempd) %s", program_name, VERSION);
 }
 
 // initialize periodic poll of sensors
@@ -881,7 +882,7 @@ tempd_unixctl_dump(struct unixctl_conn *conn, int argc OVS_UNUSED,
 }
 
 
-static unixctl_cb_func halon_tempd_exit;
+static unixctl_cb_func ops_tempd_exit;
 
 static char *parse_options(int argc, char *argv[], char **unixctl_path);
 OVS_NO_RETURN static void usage(void);
@@ -909,7 +910,7 @@ main(int argc, char *argv[])
     if (retval) {
         exit(EXIT_FAILURE);
     }
-    unixctl_command_register("exit", "", 0, 0, halon_tempd_exit, &exiting);
+    unixctl_command_register("exit", "", 0, 0, ops_tempd_exit, &exiting);
 
     tempd_init(remote);
     free(remote);
@@ -1018,7 +1019,7 @@ parse_options(int argc, char *argv[], char **unixctl_pathp)
 static void
 usage(void)
 {
-    printf("%s: Halon tempd daemon\n"
+    printf("%s: OpenSwitch tempd daemon\n"
            "usage: %s [OPTIONS] [DATABASE]\n"
            "where DATABASE is a socket on which ovsdb-server is listening\n"
            "      (default: \"unix:%s/db.sock\").\n",
@@ -1034,7 +1035,7 @@ usage(void)
 }
 
 static void
-halon_tempd_exit(struct unixctl_conn *conn, int argc OVS_UNUSED,
+ops_tempd_exit(struct unixctl_conn *conn, int argc OVS_UNUSED,
                   const char *argv[] OVS_UNUSED, void *exiting_)
 {
     bool *exiting = exiting_;

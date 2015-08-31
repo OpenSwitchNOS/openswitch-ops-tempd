@@ -128,8 +128,6 @@ COVERAGE_DEFINE(tempd_reconfigure);
 #define MILI_DEGREES    1000
 #define MILI_DEGREES_FLOAT  1000.0
 
-#define DEFAULT_YAML_DIR    "/usr/local/halon/platform/hwdesc"
-
 // sensor status reported in DB (must match sensor_status string array, below)
 enum sensorstatus {
     SENSOR_STATUS_UNINITIALIZED = 0,

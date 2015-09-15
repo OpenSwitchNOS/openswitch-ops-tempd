@@ -17,7 +17,7 @@
 
 cmake_minimum_required (VERSION 2.8)
 
-set (TEMPD tempd)
+set (TEMPD ops-tempd)
 project (${TEMPD})
 set (SRC_DIR src)
 set (INCL_DIR include)
@@ -34,16 +34,16 @@ include_directories (${PROJECT_BINARY_DIR} ${PROJECT_SOURCE_DIR}/${INCL_DIR}
                      ${OVSCOMMON_INCLUDE_DIRS}
 )
 
-# Sources to build tempd
+# Sources to build ops-tempd
 set (SOURCES ${SRC_DIR}/tempd.c)
 
-# Rules to build tempd
+# Rules to build ops-tempd
 add_executable (${TEMPD} ${SOURCES})
 
 target_link_libraries (${TEMPD} ${CONFIG_YAML_LIBRARIES}
                        ${OVSCOMMON_LIBRARIES} ${OVSDB_LIBRARIES}
                        -lpthread -lrt)
 
-# Rules to install tempd binary in rootfs
+# Rules to install ops-tempd binary in rootfs
 install(TARGETS ${TEMPD}
         RUNTIME DESTINATION bin)

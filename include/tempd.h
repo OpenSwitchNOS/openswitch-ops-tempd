@@ -16,7 +16,7 @@
 */
 
 /************************************************************************//**
- * @defgroup tempd Temperature Daemon
+ * @defgroup ops-tempd Temperature Daemon
  * This module is the platform daemon that processess and manages temperature
  * sensors for all subsystems in the switch that have temperatrure sensors.
  * @{
@@ -40,7 +40,7 @@
  *
  * Command line options:
  *
- *     usage: tempd [OPTIONS] [DATABASE]
+ *     usage: ops-tempd [OPTIONS] [DATABASE]
  *     where DATABASE is a socket on which ovsdb-server is listening
  *           (default: "unix:/var/run/openvswitch/db.sock").
  *
@@ -57,14 +57,14 @@
  *     Daemon options:
  *          --detach                run in background as daemon
  *          --no-chdir              do not chdir to '/'
- *          --pidfile[=FILE]        create pidfile (default: /var/run/openvswitch/tempd.pid)
+ *          --pidfile[=FILE]        create pidfile (default: /var/run/openvswitch/ops-tempd.pid)
  *          --overwrite-pidfile     with --pidfile, start even if already running
  *
  *     Logging options:
  *          -vSPEC, --verbose=SPEC   set logging levels
  *          -v, --verbose            set maximum verbosity level
  *          --log-file[=FILE]        enable logging to specified FILE
- *                                  (default: /var/log/openvswitch/tempd.log)
+ *                                  (default: /var/log/openvswitch/ops-tempd.log)
  *          --syslog-target=HOST:PORT  also send syslog msgs to HOST:PORT via UDP
  *
  *     Other options:
@@ -75,12 +75,12 @@
  *
  * ovs-apptcl options:
  *
- *      Support dump: ovs-appctl -t tempd tempd/dump
+ *      Support dump: ovs-appctl -t ops-tempd ops-tempd/dump
  *
  *
  * OVSDB elements usage
  *
- *     Creation: The following rows/cols are created by tempd
+ *     Creation: The following rows/cols are created by ops-tempd
  *               rows in Temp_sensor table
  *               Temp_sensor:name
  *               Temp_sensor:location
@@ -90,23 +90,23 @@
  *               Temp_sensor:fan_state
  *               Temp_sensor:status
  *
- *     Written: The following cols are written by tempd
+ *     Written: The following cols are written by ops-tempd
  *              Temp_sensor:temperature
  *              Temp_sensor:fan_state
  *              Temp_sensor:status
- *              daemon["tempd"]:cur_hw
+ *              daemon["ops-tempd"]:cur_hw
  *              subsystem:temp_sensors
  *
- *     Read: The following cols are read by tempd
+ *     Read: The following cols are read by ops-tempd
  *           subsystem:name
  *           subsystem:hw_desc_dir
  *
  * Linux Files:
  *
- *     The following files are written by tempd
- *           /var/run/openvswitch/tempd.pid: Process ID for the Temperature
+ *     The following files are written by ops-tempd
+ *           /var/run/openvswitch/ops-tempd.pid: Process ID for the Temperature
  *           daemon
- *           /var/run/openvswitch/tempd.<pid>.ctl: unixctl socket for the Temperature
+ *           /var/run/openvswitch/ops-tempd.<pid>.ctl: unixctl socket for the Temperature
  *           daemon
  *
  * @}
@@ -115,11 +115,11 @@
 #ifndef _TEMPD_H_
 #define _TEMPD_H_
 
-VLOG_DEFINE_THIS_MODULE(tempd);
+VLOG_DEFINE_THIS_MODULE(ops_tempd);
 
 COVERAGE_DEFINE(tempd_reconfigure);
 
-#define NAME_IN_DAEMON_TABLE "tempd"
+#define NAME_IN_DAEMON_TABLE "ops-tempd"
 
 #define POLLING_PERIOD  5
 #define MSEC_PER_SEC    1000
@@ -206,4 +206,4 @@ struct locl_sensor {
 
 #endif /* _TEMPD_H_ */
 
-/** @} end of group tempd */
+/** @} end of group ops-tempd */

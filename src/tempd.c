@@ -16,7 +16,7 @@
 */
 
 /************************************************************************//**
- * @ingroup tempd
+ * @ingroup ops-tempd
  *
  * @file
  * Source file for the platform Temperature daemon
@@ -551,9 +551,9 @@ tempd_init(const char *remote)
     ovsdb_idl_add_column(idl, &ovsrec_subsystem_col_hw_desc_dir);
     ovsdb_idl_omit_alert(idl, &ovsrec_subsystem_col_hw_desc_dir);
 
-    unixctl_command_register("tempd/dump", "", 0, 0,
+    unixctl_command_register("ops-tempd/dump", "", 0, 0,
                              tempd_unixctl_dump, NULL);
-    unixctl_command_register("tempd/test", "sensor temp", 2, 2,
+    unixctl_command_register("ops-tempd/test", "sensor temp", 2, 2,
                              tempd_unixctl_test, NULL);
 }
 
@@ -817,7 +817,7 @@ tempd_unixctl_dump(struct unixctl_conn *conn, int argc OVS_UNUSED,
     struct shash_node *snode;
     struct shash_node *tnode;
 
-    ds_put_cstr(&ds, "Support Dump for Platform Temperature Daemon (tempd)\n");
+    ds_put_cstr(&ds, "Support Dump for Platform Temperature Daemon (ops-tempd)\n");
 
     SHASH_FOR_EACH(snode, &subsystem_data) {
         struct locl_subsystem *subsystem = (struct locl_subsystem *)snode->data;

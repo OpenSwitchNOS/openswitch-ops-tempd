@@ -1,4 +1,4 @@
-OPS-TEMPD
+ops-tempd
 =========
 
 What is ops-tempd?
@@ -12,12 +12,12 @@ What is the structure of the repository?
 
 What is the license?
 --------------------
-The ops-tempd source may be used under the terms of the Apache 2.0 license. For more details refer to [COPYING](COPYING).
+The ops-tempd source may be used under the terms of the Apache 2.0 license. For more details refer to [COPYING](https://git.openswitch.net/cgit/openswitch/ops-tempd/tree/COPYING).
 
 What other documents are available?
 ===================================
-For a high level design of ops-tempd, refer to [DESIGN.md](DESIGN.md).
-For answers to common questions, read [FAQ.md](FAQ.md).
-For the current list of contributors and maintainers, refer to [AUTHORS.md](AUTHORS.md).
+For a high level design of ops-tempd, refer to [DESIGN](https://www.openswitch.net/documents/dev/ops-tempd/DESIGN).
+For answers to common questions, read [FAQ](https://git.openswitch.net/cgit/openswitch/ops-tempd/tree/FAQ.md).
+For the current list of contributors and maintainers, refer to [AUTHORS](https://git.openswitch.net/cgit/openswitch/ops-tempd/tree/AUTHORS.md).
 
-For general information about OpenSwitch project refer to [http://openswitch.net](http://openswitch.net).
+For general information about OpenSwitch project refer to [http://www.openswitch.net](http://www.openswitch.net).

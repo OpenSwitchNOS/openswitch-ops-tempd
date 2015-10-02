@@ -1,0 +1,9 @@
+Code-Review+2: Dan Cripe <dan.cripe@hpe.com>
+Code-Review+2: Gary Evans <gary.evans@hpe.com>
+Workflow+1: Gary Evans <gary.evans@hpe.com>
+Verified+2: Gary Evans <gary.evans@hpe.com>
+Submitted-by: Gary Evans <gary.evans@hpe.com>
+Submitted-at: Fri, 02 Oct 2015 14:29:20 +0000
+Reviewed-on: https://review.openswitch.net/1692
+Project: openswitch/ops-tempd
+Branch: refs/heads/master

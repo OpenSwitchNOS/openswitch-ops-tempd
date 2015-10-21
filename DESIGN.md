@@ -1,6 +1,6 @@
 # High level design of ops-tempd
 
-See [thermal management design](http://www.openswitch.net/documents/dev/thermal_management_design) for a description of OpenSwitch thermal management.
+See [thermal management design](/documents/user/thermal_management_design) for a description of OpenSwitch thermal management.
 
 ## Reponsibilities
 The temperature sensor daemon reads the state of system thermal sensors and compares the readings to vendor-specified thresholds for status and fan levels. The results are stored in the OpenSwitch database and inform ops-fand what speed setting is required.
@@ -109,7 +109,7 @@ locl_sensor: sensor data
 ```
 
 ## References
-* [thermal management design](http://www.openswitch.net/documents/dev/thermal_management_design)
-* [config-yaml library](http://www.openswitch.net/dev/config_yaml_design)
-* [hardware description files](http://www.openswitch.net/documents/dev/ops-hw-config/DESIGN)
-* [fan daemon](http://www.openswitch.net/documents/dev/ops-fand/DESIGN)
+* [thermal management design](/documents/user/thermal_management_design)
+* [config-yaml library](/documents/dev/ops-config-yaml/DESIGN)
+* [hardware description files](/documents/dev/ops-hw-config/DESIGN)
+* [fan daemon](/documents/dev/ops-fand/DESIGN)

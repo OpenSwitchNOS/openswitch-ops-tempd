@@ -7,8 +7,8 @@ The ops-tempd daemon reads temperature sensors and compares the values to define
 
 What is the structure of the repository?
 ----------------------------------------
-The * src/ area contains the source files for ops-tempd
-The * include/ area contains the header files for ops-tempd
+The * src/ area contains the source files for ops-tempd.
+The * include/ area contains the header files for ops-tempd.
 
 What is the license?
 --------------------

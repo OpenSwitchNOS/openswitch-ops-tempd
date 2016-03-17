@@ -70,6 +70,7 @@
 #include "coverage.h"
 #include "config-yaml.h"
 #include "tempd.h"
+#include "eventlog.h"
 
 static struct ovsdb_idl *idl;
 
@@ -219,6 +220,8 @@ tempd_read_sensor(struct locl_sensor *sensor)
         lm75_read(sensor);
     } else {
         VLOG_WARN("Unrecognized sensor type %s", yaml_sensor->type);
+        log_event("TEMP_SENSOR_UNRECOGNIZED", EV_KV("type",
+            "%s", yaml_sensor->type));
         sensor->temp = DEFAULT_TEMP * MILI_DEGREES;
     }
 
@@ -509,6 +512,8 @@ tempd_unixctl_test(struct unixctl_conn *conn, int argc OVS_UNUSED,
 static void
 tempd_init(const char *remote)
 {
+    int retval;
+
     // initialize subsystems
     init_subsystems();
 
@@ -554,6 +559,11 @@ tempd_init(const char *remote)
                              tempd_unixctl_dump, NULL);
     unixctl_command_register("ops-tempd/test", "sensor temp", 2, 2,
                              tempd_unixctl_test, NULL);
+
+    retval = event_log_init("TEMPERATURE");
+    if(retval < 0) {
+        VLOG_ERR("Event log initialization failed for tempareture");
+    }
 }
 
 // pre-exit shutdown processing
@@ -590,6 +600,8 @@ tempd_run__(void)
                     if (subsystem->emergency_shutdown == true) {
                         VLOG_WARN("Emergency shutdown initiated for sensor %s",
                                 sensor->name);
+                        log_event("TEMP_SENSOR_SHUTDOWN",
+                            EV_KV("name", "%s", sensor->name));
                         system(EMERGENCY_POWEROFF);
                         // shouldn't continue
                         while (1) {

@@ -70,6 +70,7 @@
 #include "coverage.h"
 #include "config-yaml.h"
 #include "tempd.h"
+#include "eventlog.h"
 
 static struct ovsdb_idl *idl;
 
@@ -511,6 +512,8 @@ tempd_init(const char *remote)
 {
     // initialize subsystems
     init_subsystems();
+
+    event_log_init("TEMPERATURE");
 
     // initialize the yaml handle
     yaml_handle = yaml_new_config_handle();

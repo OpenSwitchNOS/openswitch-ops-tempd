@@ -339,7 +339,7 @@ add_subsystem(const struct ovsrec_subsystem *ovsrec_subsys)
     const YamlThermalInfo *info;
 
     // create and initialize basic subsystem information
-    VLOG_DBG("Adding new subsystem %s", ovsrec_subsys->name);
+    VLOG_DBG("This is just a test, please ignore == Adding new subsystem %s", ovsrec_subsys->name);
     result = (struct locl_subsystem *)malloc(sizeof(struct locl_subsystem));
     memset(result, 0, sizeof(struct locl_subsystem));
     (void)shash_add(&subsystem_data, ovsrec_subsys->name, (void *)result);

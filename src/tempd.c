@@ -140,8 +140,6 @@ lookup_sensor(const char *name)
 static void
 lm75_read(struct locl_sensor *sensor)
 {
-    i2c_op *ops[2];
-    i2c_op read_lm75;
     char buf[2];
     int rc;
     bool fault = false;
@@ -151,8 +149,6 @@ lm75_read(struct locl_sensor *sensor)
             sensor->subsystem->name,
             sensor->yaml_sensor->device);
 
-    VLOG_DBG("reading sensor '%s'", sensor->yaml_sensor->device);
-
     if (sensor->test_temp != -1) {
         VLOG_DBG("Test temperature override set to %d", sensor->test_temp);
         sensor->status = SENSOR_STATUS_NORMAL;
@@ -160,20 +156,8 @@ lm75_read(struct locl_sensor *sensor)
         return;
     }
 
-    memset(buf, 0xFF, sizeof(buf));
-
-    memset(&read_lm75, 0, sizeof(read_lm75));
-
-    ops[0] = &read_lm75;
-    ops[1] = NULL;
-
-    read_lm75.direction = READ;
-    read_lm75.device = sensor->yaml_sensor->device;
-    read_lm75.byte_count = 2;
-    read_lm75.data = (unsigned char *)buf;
-    read_lm75.register_address = 0;
-
-    rc = i2c_execute(yaml_handle, sensor->subsystem->name, device, ops);
+    rc = i2c_data_read(yaml_handle, device, sensor->subsystem->name, 0,
+                       sizeof(buf), buf);
 
     if (0 != rc) {
         fault = true;

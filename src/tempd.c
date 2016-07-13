@@ -99,6 +99,23 @@ sensor_status_to_string(enum sensorstatus status)
     }
 }
 
+// map ovsdb sersorstatus string to the equivalent enum
+static enum sensorstatus
+sensor_status_to_enum(const char *status) {
+    size_t i;
+
+    if (status == NULL) {
+        return(SENSOR_STATUS_UNINITIALIZED);
+    }
+
+    for (i = 0; i < sizeof(sensor_status)/sizeof(const char *); i++) {
+        if (strcmp(sensor_status[i], status) == 0) {
+            return(i);
+        }
+    }
+    return(SENSOR_STATUS_UNINITIALIZED);
+}
+
 // map fanspeed enum to the equivalent string
 static const char *
 sensor_speed_to_string(enum fanspeed speed)
@@ -108,6 +125,23 @@ sensor_speed_to_string(enum fanspeed speed)
     } else {
         return(fan_speed[SENSOR_FAN_NORMAL]);
     }
+}
+
+// map ovsdb fanspeed string to the equivalent enum
+static enum fanspeed
+sensor_speed_to_enum(const char *speed) {
+    size_t i;
+
+    if (speed == NULL) {
+        return(SENSOR_FAN_NORMAL);
+    }
+
+    for (i = 0; i < sizeof(fan_speed)/sizeof(const char *); i++) {
+        if (strcmp(fan_speed[i], speed) == 0) {
+            return(i);
+        }
+    }
+    return(SENSOR_FAN_NORMAL);
 }
 
 // initialize the subsystem and global sensor dictionaries
@@ -631,10 +665,11 @@ tempd_run__(void)
 
         // calculate and set status
         status = sensor_status_to_string(sensor->status);
-        if (strcmp(status, cfg->status) != 0) {
+        if (sensor_status_to_enum(cfg->status) != (sensor->status)) {
             ovsrec_temp_sensor_set_status(cfg, status);
             change = true;
         }
+
         // set temperature
         if (cfg->temperature != sensor->temp) {
             ovsrec_temp_sensor_set_temperature(cfg, sensor->temp);
@@ -652,10 +687,11 @@ tempd_run__(void)
         }
         // calculate and set fan speed
         status = sensor_speed_to_string(sensor->fan_speed);
-        if (strcmp(status, cfg->fan_state) != 0) {
+        if (sensor_speed_to_enum(cfg->fan_state) != (sensor->fan_speed)) {
             ovsrec_temp_sensor_set_fan_state(cfg, status);
             change = true;
         }
+
         // set location (note: should never change)
         if (strcmp(sensor->yaml_sensor->location, cfg->location) != 0) {
             ovsrec_temp_sensor_set_location(cfg, sensor->yaml_sensor->location);

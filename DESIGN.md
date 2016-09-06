@@ -66,6 +66,7 @@ The following cols are read by ops-tempd
 ### Main loop
 Main loop pseudo-code
 ```
+  load platform support plugins
   initialize OVS IDL
   initialize appctl interface
   while not exiting
@@ -88,12 +89,12 @@ Main loop pseudo-code
   | tempd.c |       +---------------------+
   |         |       | config-yaml library |    +----------------------+
   |         +------>+                     +--->+ hw description files |
-  |         |       |                     |    +----------------------+
-  |         |       |                     |
-  |         |       |            +--------+
-  |         +------------------> | i2c    |    +----------------------+
-  |         |       |            |        +--->+ temperature sensors  |
-  |         |       +------------+--------+    +----------------------+
+  |         |       +---------------------+    +----------------------+
+  |         |
+  |         |       +-----------------+    +----------+
+  |         +------>+ tempd_plugins.c |    | platform |    +----------------------+
+  |         |       |                 |--->+ plugin   +--->+ temperature sensors  |
+  |         |       +-----------------+    +----------+    +----------------------+
   |         |
   |         |     +-------+
   |         +---->+ OVSDB |

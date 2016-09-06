@@ -114,9 +114,8 @@
 #ifndef _TEMPD_H_
 #define _TEMPD_H_
 
-VLOG_DEFINE_THIS_MODULE(ops_tempd);
-
-COVERAGE_DEFINE(tempd_reconfigure);
+#include "shash.h"
+#include <config-yaml.h>
 
 #define NAME_IN_DAEMON_TABLE "ops-tempd"
 
@@ -171,15 +170,18 @@ const char *fan_speed[] = {
 // structure to represent subsystem
 struct locl_subsystem {
     char *name;             // name of subsystem
+    const struct tempd_subsystem_class *class;
     bool marked;            // flag for calculating "in use" status
     bool valid;            // flag to know if this subsystem is valid
     struct locl_subsystem *parent_subsystem;    // pointer to parent (if any)
     struct shash subsystem_sensors;     // sensors in this subsystem
     bool emergency_shutdown;            // flag - shutdown if emergency overtemp
+    YamlConfigHandle yaml_handle;       // handle to subsystem configs
 };
 
 struct locl_sensor {
     char *name;             // name of sensor ([subsystem name]-[sensor number])
+    const struct tempd_sensor_class *class;
     struct locl_subsystem *subsystem;   // containing subsystem
     const YamlSensor *yaml_sensor;      // sensor information
     enum sensorstatus status;           // current status result
@@ -187,8 +189,9 @@ struct locl_sensor {
     int temp;               // milidegrees (C)
     int min;                // milidegrees (C)
     int max;                // milidegrees (C)
-    int fault_count;
     int test_temp;          // -1 or milidegrees (C)
+    YamlAlarmThresholds alarm_thresholds; // provided by plugin if available
+    YamlFanThresholds fan_thresholds; // provided by plugin if available
 };
 
 // i2c operation failure retry

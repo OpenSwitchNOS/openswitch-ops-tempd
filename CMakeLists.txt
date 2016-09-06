@@ -28,16 +28,20 @@ include(FindPkgConfig)
 pkg_check_modules(CONFIG_YAML REQUIRED ops-config-yaml)
 pkg_check_modules(OVSCOMMON REQUIRED libovscommon)
 pkg_check_modules(OVSDB REQUIRED libovsdb)
+configure_file ("${PROJECT_SOURCE_DIR}/${INCL_DIR}/tempd_plugins.h.in"
+                "${PROJECT_BINARY_DIR}/tempd_plugins.h")
 
 include_directories (${PROJECT_BINARY_DIR} ${PROJECT_SOURCE_DIR}/${INCL_DIR}
                      ${OVSCOMMON_INCLUDE_DIRS}
 )
 
 # Sources to build ops-tempd
-set (SOURCES ${SRC_DIR}/tempd.c)
+set (SOURCES ${SRC_DIR}/tempd.c ${SRC_DIR}/tempd_plugins.c)
 
 # Rules to build ops-tempd
 add_executable (${TEMPD} ${SOURCES})
+add_subdirectory(plugins/sysfs)
+add_subdirectory(plugins/i2c)
 
 target_link_libraries (${TEMPD} ${CONFIG_YAML_LIBRARIES}
                        ${OVSCOMMON_LIBRARIES} ${OVSDB_LIBRARIES}

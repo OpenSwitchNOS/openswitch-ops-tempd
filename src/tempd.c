@@ -68,9 +68,13 @@
 #include "openvswitch/vlog.h"
 #include "vswitch-idl.h"
 #include "coverage.h"
-#include "config-yaml.h"
 #include "tempd.h"
 #include "eventlog.h"
+#include "tempd_plugins.h"
+
+VLOG_DEFINE_THIS_MODULE(ops_tempd);
+
+COVERAGE_DEFINE(tempd_reconfigure);
 
 static struct ovsdb_idl *idl;
 
@@ -79,8 +83,6 @@ static unsigned int idl_seqno;
 static unixctl_cb_func tempd_unixctl_dump;
 
 static bool cur_hw_set = false;
-
-YamlConfigHandle yaml_handle;
 
 struct shash sensor_data;       // struct locl_sensor (all sensors)
 struct shash subsystem_data;    // struct locl_subsystem
@@ -134,89 +136,33 @@ lookup_sensor(const char *name)
     return(NULL);
 }
 
-// read the lm75 temperature sensor
-// lm75 has a two-byte temperature output. The first byte is the temperature,
-// and the second byte's highest bit is a half-degree adder
-static void
-lm75_read(struct locl_sensor *sensor)
-{
-    char buf[2];
-    int rc;
-    bool fault = false;
-
-    const YamlDevice *device = yaml_find_device(
-            yaml_handle,
-            sensor->subsystem->name,
-            sensor->yaml_sensor->device);
-
-    if (sensor->test_temp != -1) {
-        VLOG_DBG("Test temperature override set to %d", sensor->test_temp);
-        sensor->status = SENSOR_STATUS_NORMAL;
-        sensor->temp = sensor->test_temp;
-        return;
-    }
-
-    rc = i2c_data_read(yaml_handle, device, sensor->subsystem->name, 0,
-                       sizeof(buf), buf);
-
-    if (0 != rc) {
-        fault = true;
-    }
-
-    if (true == fault) {
-        // if we've hit the retry limit, mark it as failed
-        if (sensor->fault_count > MAX_FAIL_RETRY) {
-            sensor->status = SENSOR_STATUS_FAILED;
-        }
-        // otherwise, don't change the temp or status, but increment the retry
-        // count
-        sensor->fault_count++;
-        return;
-    }
-
-    // if we succeeded in reading the temp, then clear the retry count
-    sensor->fault_count = 0;
-
-    if (sensor->status == SENSOR_STATUS_FAILED) {
-        // we need to kick this sensor back into a working state
-        sensor->status = SENSOR_STATUS_NORMAL;
-    }
-
-    // convert to milidegrees (C)
-    sensor->temp = buf[0] * MILI_DEGREES;
-
-    // high bit in second byte is half-degree indicator
-    if (buf[1] < 0) {
-        // half-degree in milidegrees
-        sensor->temp += 500;
-    }
-
-    VLOG_DBG("%s: %4.1fc", sensor->yaml_sensor->device, ((float)sensor->temp)/MILI_DEGREES_FLOAT);
-}
-
 // read sensor temperature and calculate status/fan speed setting
 static void
 tempd_read_sensor(struct locl_sensor *sensor)
 {
-    const YamlSensor *yaml_sensor = sensor->yaml_sensor;
+    bool operable;
 
-    if (strcmp(yaml_sensor->type, "lm75") == 0) {
-        lm75_read(sensor);
-    } else {
-        VLOG_WARN("Unrecognized sensor type %s", yaml_sensor->type);
-        log_event("TEMP_SENSOR_UNRECOGNIZED", EV_KV("type",
-            "%s", yaml_sensor->type));
-        sensor->temp = DEFAULT_TEMP * MILI_DEGREES;
+    if(sensor->class->tempd_status_get(sensor, &operable)) {
+        VLOG_ERR("Failed to get subsystem %s sensor %s status",
+                 sensor->subsystem->name,
+                 sensor->name);
+        return;
+    }
+
+    if (!operable) {
+        sensor->status = SENSOR_STATUS_FAILED;
+        return;
+    }
+
+    if(sensor->class->tempd_temperature_get(sensor, &sensor->temp)) {
+        VLOG_ERR("Failed to get subsystem %s sensor %s temperature",
+                 sensor->subsystem->name,
+                 sensor->name);
+        return;
     }
 
     // recalculate alarm and fan state
-
     // decreasing alarms
-
-    if (SENSOR_STATUS_FAILED == sensor->status) {
-        // no temp to report, unable to read sensor
-        return;
-    }
 
     // adjust min and max values
     if (sensor->min > sensor->temp) {
@@ -229,85 +175,187 @@ tempd_read_sensor(struct locl_sensor *sensor)
 
     // decreasing alarms
     if (SENSOR_STATUS_EMERGENCY == sensor->status &&
-            (float)sensor->temp/MILI_DEGREES_FLOAT <= yaml_sensor->alarm_thresholds.emergency_off) {
+            (float)sensor->temp/MILI_DEGREES_FLOAT <= sensor->alarm_thresholds.emergency_off) {
         sensor->status = SENSOR_STATUS_CRITICAL;
     }
 
     if (SENSOR_STATUS_CRITICAL == sensor->status &&
-            (float)sensor->temp /MILI_DEGREES_FLOAT<= yaml_sensor->alarm_thresholds.critical_off) {
+            (float)sensor->temp /MILI_DEGREES_FLOAT<= sensor->alarm_thresholds.critical_off) {
         sensor->status = SENSOR_STATUS_MAX;
     }
 
     if (SENSOR_STATUS_MAX == sensor->status &&
-            (float)sensor->temp/MILI_DEGREES_FLOAT <= yaml_sensor->alarm_thresholds.max_off) {
+            (float)sensor->temp/MILI_DEGREES_FLOAT <= sensor->alarm_thresholds.max_off) {
         sensor->status = SENSOR_STATUS_NORMAL;
     }
 
     if (SENSOR_STATUS_NORMAL == sensor->status &&
-            (float)sensor->temp/MILI_DEGREES_FLOAT > yaml_sensor->alarm_thresholds.low_crit) {
+            (float)sensor->temp/MILI_DEGREES_FLOAT > sensor->alarm_thresholds.low_crit) {
         sensor->status = SENSOR_STATUS_MIN;
     }
 
     if (SENSOR_STATUS_MIN == sensor->status &&
-            (float)sensor->temp/MILI_DEGREES_FLOAT > yaml_sensor->alarm_thresholds.min) {
+            (float)sensor->temp/MILI_DEGREES_FLOAT > sensor->alarm_thresholds.min) {
         sensor->status = SENSOR_STATUS_NORMAL;
     }
 
     // increasing alarms
     if (SENSOR_STATUS_NORMAL == sensor->status &&
-            (float)sensor->temp/MILI_DEGREES_FLOAT >= yaml_sensor->alarm_thresholds.max_on) {
+            (float)sensor->temp/MILI_DEGREES_FLOAT >= sensor->alarm_thresholds.max_on) {
         sensor->status = SENSOR_STATUS_MAX;
     }
 
     if (SENSOR_STATUS_MAX == sensor->status &&
-            (float)sensor->temp/MILI_DEGREES_FLOAT >= yaml_sensor->alarm_thresholds.critical_on) {
+            (float)sensor->temp/MILI_DEGREES_FLOAT >= sensor->alarm_thresholds.critical_on) {
         sensor->status = SENSOR_STATUS_CRITICAL;
     }
 
     if (SENSOR_STATUS_CRITICAL == sensor->status &&
-            (float)sensor->temp/MILI_DEGREES_FLOAT >= yaml_sensor->alarm_thresholds.emergency_on) {
+            (float)sensor->temp/MILI_DEGREES_FLOAT >= sensor->alarm_thresholds.emergency_on) {
         sensor->status = SENSOR_STATUS_EMERGENCY;
     }
 
     if (SENSOR_STATUS_NORMAL == sensor->status &&
-            (float)sensor->temp/MILI_DEGREES_FLOAT <= yaml_sensor->alarm_thresholds.min) {
+            (float)sensor->temp/MILI_DEGREES_FLOAT <= sensor->alarm_thresholds.min) {
         sensor->status = SENSOR_STATUS_MIN;
     }
 
     if (SENSOR_STATUS_MIN == sensor->status &&
-            (float)sensor->temp/MILI_DEGREES_FLOAT <= yaml_sensor->alarm_thresholds.low_crit) {
+            (float)sensor->temp/MILI_DEGREES_FLOAT <= sensor->alarm_thresholds.low_crit) {
         sensor->status = SENSOR_STATUS_LOWCRIT;
     }
 
     // calculate requested fan speed
     if (SENSOR_FAN_NORMAL == sensor->fan_speed &&
-            (float)sensor->temp/MILI_DEGREES_FLOAT >= yaml_sensor->fan_thresholds.medium_on) {
+            (float)sensor->temp/MILI_DEGREES_FLOAT >= sensor->fan_thresholds.medium_on) {
         sensor->fan_speed = SENSOR_FAN_MEDIUM;
     }
 
     if (SENSOR_FAN_MEDIUM == sensor->fan_speed &&
-            (float)sensor->temp/MILI_DEGREES_FLOAT >= yaml_sensor->fan_thresholds.fast_on) {
+            (float)sensor->temp/MILI_DEGREES_FLOAT >= sensor->fan_thresholds.fast_on) {
         sensor->fan_speed = SENSOR_FAN_FAST;
     }
 
     if (SENSOR_FAN_FAST == sensor->fan_speed &&
-            (float)sensor->temp/MILI_DEGREES_FLOAT >= yaml_sensor->fan_thresholds.max_on) {
+            (float)sensor->temp/MILI_DEGREES_FLOAT >= sensor->fan_thresholds.max_on) {
         sensor->fan_speed = SENSOR_FAN_MAX;
     }
 
     if (SENSOR_FAN_MAX == sensor->fan_speed &&
-            (float)sensor->temp/MILI_DEGREES_FLOAT <= yaml_sensor->fan_thresholds.max_off) {
+            (float)sensor->temp/MILI_DEGREES_FLOAT <= sensor->fan_thresholds.max_off) {
         sensor->fan_speed = SENSOR_FAN_FAST;
     }
 
     if (SENSOR_FAN_FAST == sensor->fan_speed &&
-            (float)sensor->temp/MILI_DEGREES_FLOAT <= yaml_sensor->fan_thresholds.fast_off) {
+            (float)sensor->temp/MILI_DEGREES_FLOAT <= sensor->fan_thresholds.fast_off) {
         sensor->fan_speed = SENSOR_FAN_MEDIUM;
     }
 
     if (SENSOR_FAN_MEDIUM == sensor->fan_speed &&
-            (float)sensor->temp/MILI_DEGREES_FLOAT <= yaml_sensor->fan_thresholds.medium_off) {
+            (float)sensor->temp/MILI_DEGREES_FLOAT <= sensor->fan_thresholds.medium_off) {
         sensor->fan_speed = SENSOR_FAN_NORMAL;
+    }
+}
+
+static void
+sensor_get_thresholds(struct locl_sensor *sensor)
+{
+    if (sensor->class->tempd_threshold_get(sensor,
+                                           THRESHOLD_ALARM_EMERGENCY_ON,
+                                           &sensor->alarm_thresholds.emergency_on)) {
+        sensor->alarm_thresholds.emergency_on =
+            sensor->yaml_sensor->alarm_thresholds.emergency_on;
+    }
+
+    if (sensor->class->tempd_threshold_get(sensor,
+                                           THRESHOLD_ALARM_EMERGENCY_OFF,
+                                           &sensor->alarm_thresholds.emergency_off)) {
+        sensor->alarm_thresholds.emergency_off =
+            sensor->yaml_sensor->alarm_thresholds.emergency_off;
+    }
+
+    if (sensor->class->tempd_threshold_get(sensor,
+                                           THRESHOLD_ALARM_CRITICAL_ON,
+                                           &sensor->alarm_thresholds.critical_on)) {
+        sensor->alarm_thresholds.critical_on =
+            sensor->yaml_sensor->alarm_thresholds.critical_on;
+    }
+
+    if (sensor->class->tempd_threshold_get(sensor,
+                                           THRESHOLD_ALARM_CRITICAL_OFF,
+                                           &sensor->alarm_thresholds.critical_off)) {
+        sensor->alarm_thresholds.critical_off =
+            sensor->yaml_sensor->alarm_thresholds.critical_off;
+    }
+
+    if (sensor->class->tempd_threshold_get(sensor,
+                                           THRESHOLD_ALARM_MAX_ON,
+                                           &sensor->alarm_thresholds.max_on)) {
+        sensor->alarm_thresholds.max_on =
+            sensor->yaml_sensor->alarm_thresholds.max_on;
+    }
+
+    if (sensor->class->tempd_threshold_get(sensor,
+                                           THRESHOLD_ALARM_MAX_OFF,
+                                           &sensor->alarm_thresholds.max_off)) {
+        sensor->alarm_thresholds.max_off =
+            sensor->yaml_sensor->alarm_thresholds.max_off;
+    }
+
+    if (sensor->class->tempd_threshold_get(sensor,
+                                           THRESHOLD_ALARM_MIN,
+                                           &sensor->alarm_thresholds.min)) {
+        sensor->alarm_thresholds.min =
+            sensor->yaml_sensor->alarm_thresholds.min;
+    }
+
+    if (sensor->class->tempd_threshold_get(sensor,
+                                           THRESHOLD_ALARM_LOW_CRIT,
+                                           &sensor->alarm_thresholds.low_crit)) {
+        sensor->alarm_thresholds.low_crit =
+            sensor->yaml_sensor->alarm_thresholds.low_crit;
+    }
+
+    if (sensor->class->tempd_threshold_get(sensor,
+                                           THRESHOLD_FAN_MAX_ON,
+                                           &sensor->fan_thresholds.max_on)) {
+        sensor->fan_thresholds.max_on =
+            sensor->yaml_sensor->fan_thresholds.max_on;
+    }
+
+    if (sensor->class->tempd_threshold_get(sensor,
+                                           THRESHOLD_FAN_MAX_OFF,
+                                           &sensor->fan_thresholds.max_off)) {
+        sensor->fan_thresholds.max_off =
+            sensor->yaml_sensor->fan_thresholds.max_off;
+    }
+
+    if (sensor->class->tempd_threshold_get(sensor,
+                                           THRESHOLD_FAN_FAST_ON,
+                                           &sensor->fan_thresholds.fast_on)) {
+        sensor->fan_thresholds.fast_on =
+            sensor->yaml_sensor->fan_thresholds.fast_on;
+    }
+
+    if (sensor->class->tempd_threshold_get(sensor,
+                                           THRESHOLD_FAN_FAST_OFF,
+                                           &sensor->fan_thresholds.fast_off)) {
+        sensor->fan_thresholds.fast_off =
+            sensor->yaml_sensor->fan_thresholds.fast_off;
+    }
+
+    if (sensor->class->tempd_threshold_get(sensor,
+                                           THRESHOLD_FAN_MEDIUM_ON,
+                                           &sensor->fan_thresholds.medium_on)) {
+        sensor->fan_thresholds.medium_on =
+            sensor->yaml_sensor->fan_thresholds.medium_on;
+    }
+
+    if (sensor->class->tempd_threshold_get(sensor,
+                                           THRESHOLD_FAN_MEDIUM_OFF,
+                                           &sensor->fan_thresholds.medium_off)) {
+        sensor->fan_thresholds.medium_off =
+            sensor->yaml_sensor->fan_thresholds.medium_off;
     }
 }
 
@@ -324,17 +372,24 @@ add_subsystem(const struct ovsrec_subsystem *ovsrec_subsys)
     int sensor_count;
     const char *dir;
     const YamlThermalInfo *info;
+    // initialize the yaml handle
+    YamlConfigHandle yaml_handle = yaml_new_config_handle();
+    /* Using hard coded type untill there's support for multiple platforms in
+     * ops-sysd. */
+    const struct tempd_subsystem_class *subsystem_class = tempd_subsystem_class_get(PLATFORM_TYPE_STR);
+    const struct tempd_sensor_class *sensor_class = tempd_sensor_class_get(PLATFORM_TYPE_STR);
 
-    // create and initialize basic subsystem information
-    VLOG_DBG("Adding new subsystem %s", ovsrec_subsys->name);
-    result = (struct locl_subsystem *)malloc(sizeof(struct locl_subsystem));
-    memset(result, 0, sizeof(struct locl_subsystem));
-    (void)shash_add(&subsystem_data, ovsrec_subsys->name, (void *)result);
-    result->name = strdup(ovsrec_subsys->name);
-    result->marked = false;
-    result->marked = true;
-    result->parent_subsystem = NULL;  // OPS_TODO: find parent subsystem
-    shash_init(&result->subsystem_sensors);
+    if (subsystem_class == NULL) {
+        VLOG_ERR("No plugin provides subsystem class for %s type",
+                 PLATFORM_TYPE_STR);
+        return NULL;
+    }
+
+    if (sensor_class == NULL) {
+        VLOG_ERR("No plugin provides sensor class for %s type",
+                 PLATFORM_TYPE_STR);
+        return NULL;
+    }
 
     // use a default if the hw_desc_dir has not been populated
     dir = ovsrec_subsys->hw_desc_dir;
@@ -376,7 +431,25 @@ add_subsystem(const struct ovsrec_subsystem *ovsrec_subsys)
 
     // get the thermal info, need it for shutdown flag
     info = yaml_get_thermal_info(yaml_handle, ovsrec_subsys->name);
+
+    // create and initialize basic subsystem information
+    VLOG_DBG("Adding new subsystem %s", ovsrec_subsys->name);
+    result = subsystem_class->tempd_subsystem_alloc();
+    result->name = strdup(ovsrec_subsys->name);
+    result->marked = false;
+    result->valid = false;
+    result->parent_subsystem = NULL;  // OPS_TODO: find parent subsystem
+    shash_init(&result->subsystem_sensors);
     result->emergency_shutdown = info->auto_shutdown;
+    result->yaml_handle = yaml_handle;
+    result->class = subsystem_class;
+    rc = result->class->tempd_subsystem_construct(result);
+    if (rc) {
+        VLOG_ERR("Failed to construct subsystem %s", result->name);
+        free(result->name);
+        result->class->tempd_subsystem_dealloc(result);
+        return NULL;
+    }
 
     // OPS_TODO: the thermal info has a polling period, but when we
     // OPS_TODO: have multiple subsystems, that could be tricky to
@@ -388,10 +461,10 @@ add_subsystem(const struct ovsrec_subsystem *ovsrec_subsys)
     sensor_count = yaml_get_sensor_count(yaml_handle, ovsrec_subsys->name);
 
     if (sensor_count <= 0) {
+        free(result->name);
+        result->class->tempd_subsystem_dealloc(result);
         return(NULL);
     }
-
-    result->valid = true;
 
     // subsystem db object has reference array for sensors
     sensor_array = (struct ovsrec_temp_sensor **)malloc(sensor_count * sizeof(struct ovsrec_temp_sensor *));
@@ -416,7 +489,7 @@ add_subsystem(const struct ovsrec_subsystem *ovsrec_subsys)
         // sensor number
         asprintf(&sensor_name, "%s-%d", ovsrec_subsys->name, sensor->number);
         // allocate and initialize basic sensor information
-        new_sensor = (struct locl_sensor *)malloc(sizeof(struct locl_sensor));
+        new_sensor = sensor_class->tempd_sensor_alloc();
         new_sensor->name = sensor_name;
         new_sensor->subsystem = result;
         new_sensor->yaml_sensor = sensor;
@@ -426,7 +499,18 @@ add_subsystem(const struct ovsrec_subsystem *ovsrec_subsys)
         new_sensor->status = SENSOR_STATUS_NORMAL;
         new_sensor->fan_speed = SENSOR_FAN_NORMAL;
         new_sensor->test_temp = -1;     // no test temperature override set
+        new_sensor->class = sensor_class;
+        rc = new_sensor->class->tempd_sensor_construct(new_sensor);
+        if (rc) {
+            VLOG_ERR("Failed constructing sensor %s subsystem %s",
+                     new_sensor->name,
+                     result->name);
+            free(new_sensor->name);
+            sensor_class->tempd_sensor_dealloc(new_sensor);
+            continue;
+        }
 
+        sensor_get_thresholds(new_sensor);
         // try to populate sensor information with real data
         tempd_read_sensor(new_sensor);
 
@@ -458,7 +542,9 @@ add_subsystem(const struct ovsrec_subsystem *ovsrec_subsys)
         sensor_array[sensor_idx++] = ovs_sensor;
     }
 
-    ovsrec_subsystem_set_temp_sensors(ovsrec_subsys, sensor_array, sensor_count);
+    result->valid = true;
+    (void)shash_add(&subsystem_data, ovsrec_subsys->name, (void *)result);
+    ovsrec_subsystem_set_temp_sensors(ovsrec_subsys, sensor_array, sensor_idx);
     // execute transaction
     ovsdb_idl_txn_commit_block(txn);
     ovsdb_idl_txn_destroy(txn);
@@ -498,11 +584,14 @@ tempd_init(const char *remote)
 {
     int retval;
 
+    if (tempd_plugins_load()) {
+        VLOG_ERR("Failed to load platform plugins.");
+    } else {
+        tempd_plugins_init();
+    }
+
     // initialize subsystems
     init_subsystems();
-
-    // initialize the yaml handle
-    yaml_handle = yaml_new_config_handle();
 
     // create connection to db
     idl = ovsdb_idl_create(remote, &ovsrec_idl_class, false, true);
@@ -554,6 +643,8 @@ tempd_init(const char *remote)
 static void
 tempd_exit(void)
 {
+    tempd_plugins_deinit();
+    tempd_plugins_unload();
     ovsdb_idl_destroy(idl);
 }
 
@@ -725,11 +816,13 @@ tempd_remove_unmarked_subsystems(void)
                 // delete the subsystem entry
                 shash_delete(&subsystem->subsystem_sensors, temp_node);
                 // free the allocated data
+                temp->class->tempd_sensor_destruct(temp);
                 free(temp->name);
-                free(temp);
+                temp->class->tempd_sensor_dealloc(temp);
             }
+            subsystem->class->tempd_subsystem_destruct(subsystem);
             free(subsystem->name);
-            free(subsystem);
+            subsystem->class->tempd_subsystem_dealloc(subsystem);
 
             // delete the subsystem dictionary entry
             shash_delete(&subsystem_data, node);
@@ -837,38 +930,41 @@ tempd_unixctl_dump(struct unixctl_conn *conn, int argc OVS_UNUSED,
                                         sensor->temp / 1000);
             ds_put_format(&ds, "\t\tMin temp: %d\n", sensor->min / 1000);
             ds_put_format(&ds, "\t\tMax temp: %d\n", sensor->max / 1000);
+            //TODO move to plugin
+#if 0
             ds_put_format(&ds, "\t\tFault count: %d\n",
                                         sensor->fault_count);
+#endif
             ds_put_format(&ds, "\t\tAlarm Thresholds: \n");
             ds_put_format(&ds, "\t\t\temergency_on: %.2f\n",
-                        sensor->yaml_sensor->alarm_thresholds.emergency_on);
+                        sensor->alarm_thresholds.emergency_on);
             ds_put_format(&ds, "\t\t\temergency_off: %.2f\n",
-                        sensor->yaml_sensor->alarm_thresholds.emergency_off);
+                        sensor->alarm_thresholds.emergency_off);
             ds_put_format(&ds, "\t\t\tcritical_on: %.2f\n",
-                        sensor->yaml_sensor->alarm_thresholds.critical_on);
+                        sensor->alarm_thresholds.critical_on);
             ds_put_format(&ds, "\t\t\tcritical_off: %.2f\n",
-                        sensor->yaml_sensor->alarm_thresholds.critical_off);
+                        sensor->alarm_thresholds.critical_off);
             ds_put_format(&ds, "\t\t\tmax_on: %.2f\n",
-                        sensor->yaml_sensor->alarm_thresholds.max_on);
+                        sensor->alarm_thresholds.max_on);
             ds_put_format(&ds, "\t\t\tmax_off: %.2f\n",
-                        sensor->yaml_sensor->alarm_thresholds.max_off);
+                        sensor->alarm_thresholds.max_off);
             ds_put_format(&ds, "\t\t\tmin: %.2f\n",
-                        sensor->yaml_sensor->alarm_thresholds.min);
+                        sensor->alarm_thresholds.min);
             ds_put_format(&ds, "\t\t\tlow_crit: %.2f\n",
-                        sensor->yaml_sensor->alarm_thresholds.low_crit);
+                        sensor->alarm_thresholds.low_crit);
             ds_put_format(&ds, "\t\tFan Thresholds: \n");
             ds_put_format(&ds, "\t\t\tmax_on: %.2f\n",
-                        sensor->yaml_sensor->fan_thresholds.max_on);
+                        sensor->fan_thresholds.max_on);
             ds_put_format(&ds, "\t\t\tmax_off: %.2f\n",
-                        sensor->yaml_sensor->fan_thresholds.max_off);
+                        sensor->fan_thresholds.max_off);
             ds_put_format(&ds, "\t\t\tfast_on: %.2f\n",
-                        sensor->yaml_sensor->fan_thresholds.fast_on);
+                        sensor->fan_thresholds.fast_on);
             ds_put_format(&ds, "\t\t\tfast_off: %.2f\n",
-                        sensor->yaml_sensor->fan_thresholds.fast_off);
+                        sensor->fan_thresholds.fast_off);
             ds_put_format(&ds, "\t\t\tmedium_on: %.2f\n",
-                        sensor->yaml_sensor->fan_thresholds.medium_on);
+                        sensor->fan_thresholds.medium_on);
             ds_put_format(&ds, "\t\t\tmedium_off: %.2f\n",
-                        sensor->yaml_sensor->fan_thresholds.medium_off);
+                        sensor->fan_thresholds.medium_off);
         }
     }
 
@@ -913,9 +1009,11 @@ main(int argc, char *argv[])
     exiting = false;
     while (!exiting) {
         tempd_run();
+        tempd_plugins_run();
         unixctl_server_run(unixctl);
 
         tempd_wait();
+        tempd_plugins_wait();
         unixctl_server_wait(unixctl);
         if (exiting) {
             poll_immediate_wake();

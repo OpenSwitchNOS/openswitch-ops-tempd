@@ -1,0 +1,68 @@
+/*
+ * Copyright Mellanox Technologies, Ltd. 2001-2016.
+ * This software product is licensed under Apache version 2, as detailed in
+ * the COPYING file.
+ */
+
+#ifndef _TEMPD_PLUGINS_H_
+#define _TEMPD_PLUGINS_H_
+
+#include "tempd_interface.h"
+
+#define PLATFORM_PLUGINS_PATH "@LIBDIR@/platform/plugins"
+#define PLATFORM_TYPE_STR "@PLATFORM_TYPE_STR@"
+
+/**
+ * Initialize ops-tempd platform support plugin. Must be implemented in plugin.
+ */
+void tempd_plugins_init(void);
+
+/**
+ * Deinitialize ops-tempd platform support plugin. Must be implemented in
+ * plugin.
+ */
+void tempd_plugins_deinit(void);
+
+/**
+ * Plugins run function. Must be implemented in plugin.
+ */
+void tempd_plugins_run(void);
+
+/**
+ * Plugins wait function. Must be implemented in plugin.
+ */
+void tempd_plugins_wait(void);
+
+/**
+ * Get tempd subsystem class.
+ *
+ * @param[in] platform_type - string containing type of the platform.
+ *
+ * @return pointer to subsystem class.
+ * @return NULL if no plugin for specified platform was loaded
+ */
+const struct tempd_subsystem_class *tempd_subsystem_class_get(const char *platform_type);
+
+/**
+ * Get tempd sensor class.
+ *
+ * @param[in] platform_type - string containing type of the platform.
+ *
+ * @return pointer to class.
+ * @return NULL if no plugin for specified platform was loaded
+ */
+const struct tempd_sensor_class *tempd_sensor_class_get(const char *platform_type);
+
+/**
+ * Loads platform plugin. Initializes callbacks from plugin.
+ *
+ * @return 0 on success, non-zero value on failure.
+ */
+int tempd_plugins_load(void);
+
+/**
+ * Unload plugin - deinitialize symbols by destroing handle.
+ */
+void tempd_plugins_unload(void);
+
+#endif /* _TEMPD_PLUGINS_H_ */
